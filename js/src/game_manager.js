@@ -4,12 +4,19 @@
  * @type {EnemyManager}
  */
 
+// States : BROWSER - CALIBRATION - PLAYING - PAUSED - GAMEOVER
+const State = {
+    BROWSER: 'BROWSER',
+    CALIBRATION: 'CALIBRATION',
+    PLAYING: 'PLAYING',
+    PAUSED: 'PAUSED',
+    GAMEOVER: 'GAMEOVER'
+}
+
 class GameManager {
 	constructor(interface_manager) {
-		this.isPlaying = false;
-        this.isPaused = false;
-        this.isFirstStart = true;
         this.lastTimeDelta = false;
+        this.state = State.BROWSER;
 
         this.interface = interface_manager;
         this.starter = null;
@@ -79,24 +86,24 @@ class GameManager {
         }
     }
 
+    async startCalibration(){
+        this.state = State.CALIBRATION;
+
+        this.loop();
+    }
+
 	async start() {
-        if(this.isPlaying) {
+        if(this.state == State.PLAYING) {
             return false;
         }
 
-		this.isPlaying = true;
+		this.state = State.PLAYING;
 
 		// set running speed (def 13)
 		enemy.increase_velocity(15, true);
 
         // init score
         score.set(0);
-
-        // init stuff
-        // if(this.isFirstStart) {
-        //     // one time inits
-        //     this.isFirstStart = false;
-        // }
 
         nature.initGround();
         nature.initEarth();
@@ -181,10 +188,8 @@ class GameManager {
 	}
 
     stop() {
-        if(!this.isPlaying) {return false;}
-
-        // stop the loop
-    	this.isPlaying = false;
+        if(this.state !== State.PLAYING) return false;
+        this.state = State.GAMEOVER;
 
 		// remove dust particles
 		dynoDustEmitter.removeAllParticles();
@@ -203,21 +208,21 @@ class GameManager {
 
         // set starters
         this.setStarter(0);
+        calibration.reset();
     }
 
     pause() {
-        if(!this.isPlaying) {return false;}
 
-        this.isPaused = true;
-        this.isPlaying = false;
+        if(this.state !== State.PLAYING) return false;
+        
+        this.state = State.PAUSED;
         audio.pause('bg');
     }
 
     resume() {
-        if(!this.isPaused) {return false;}
-
-        this.isPlaying = true;
-        this.isPaused = false;
+        if(this.state !== State.PAUSED) return false;
+        this.state = State.PLAYING;
+        
         audio.resume('bg');
 
         clock.getDelta(); // drop delta
@@ -228,7 +233,7 @@ class GameManager {
     reset() {
         // reset running speed (def 13)
         enemy.increase_velocity(13, true);
-
+        
         // reset stuff
         enemy.reset();
         nature.reset();
@@ -237,25 +242,65 @@ class GameManager {
         effects.reset();
 
         // redraw to remove objects from scene
-        this.render();
+        //this.render();
     }
 
     restart() {
-        if(this.isPlaying) {
+        console.log("Restart");
+        if(this.state === State.PLAYING) {
             this.stop();
         }
-
+        
         this.reset();
         this.start();
+        game.interface.buttons.restart.classList.add('hidden');
+        //this.state = State.PLAYING;
     }
 
     render() {
         let timeDelta = clock.getDelta();
-
         if(timeDelta > 0.15) {
             timeDelta = 0.15;
         }
+        
+        switch(this.state) {
+            case State.PLAYING:
+                this.playingUpdate(timeDelta);
+                break;
+            case State.GAMEOVER:
+            case State.CALIBRATION:
+                this.gameCalibrationUpdate(timeDelta);
+                break;
+            
+        }
+        
 
+        
+    }
+
+    gameCalibrationUpdate(timeDelta){
+        calibration.update(timeDelta);
+        if(calibration.isCalibrated){
+            calibration.isCalibrated = false;
+            console.log("Calibrated");
+            switch(this.state){
+                case State.CALIBRATION:
+                    this.start();
+                    break;
+                case State.GAMEOVER:
+                    this.restart();
+                    return;
+            }
+        }
+        if(config.renderer.postprocessing.enable) {
+            // postprocessing
+            composer.render(timeDelta);
+        } else {
+            // standart
+            renderer.render( scene, camera );
+        }
+    }
+    playingUpdate(timeDelta){
         if(config.camera.controls) {
             controls.update();}
 
@@ -264,7 +309,9 @@ class GameManager {
         nature.update(timeDelta);
         input.update();
         effects.update(timeDelta);
+        updatePlayerDust();
         nebulaSystem.update();
+        
 
         if(config.renderer.postprocessing.enable) {
             // postprocessing
@@ -281,14 +328,14 @@ class GameManager {
         if(state == 'visible') {
             // resume
             logs.log('GAME RESUME');
-            if(game.isPaused) {
+            if(this.state == State.PAUSED) {
                 game.resume();
                 effects.resume();
             }
         } else {
             // pause
             logs.log('GAME PAUSE');
-            if(game.isPlaying) {
+            if(this.state == State.PLAYING) {
                 game.pause();
                 effects.pause();
             }
@@ -296,9 +343,9 @@ class GameManager {
     }
 
     loop() {
-        if(!this.isPlaying) {
+        if(!this.state == State.PLAYING && !this.state == State.CALIBRATION) {
             // stop the loop if necessary
-            return false;
+            //return false;
         }
 
         requestAnimationFrame(function() {

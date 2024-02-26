@@ -89,6 +89,9 @@
 
       addKey(81, 'debug_speedup'); // q
 
+      addKey(65, 'left');
+      addKey(68, 'right');
+
       // Keyboard events
       window.addEventListener('keydown', (e) => {
         // console.log(e.keyCode);
@@ -206,8 +209,14 @@ class BodyMovementsManager {
     this.model = poseDetection.SupportedModels.MoveNet;
     this.detector = null;
     this.webcam = null;
+    this.canvas = null;
     this.state = Pose.NORMAL;
     this.prevPose = null;
+    this.leftBoundary = null;
+    this.rightBoundary = null;
+    this.jumpThreshold = null;
+    this.requiredKeypoints = ["left_ankle", "right_ankle", "left_hip", "right_hip", "left_knee", "right_knee", "left_shoulder", "right_shoulder"];
+    this.keypointsToDraw = ['left_wrist', 'right_wrist', 'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow', 'left_ankle', 'right_ankle'];
     this.init();
   }
 
@@ -216,6 +225,13 @@ class BodyMovementsManager {
       .then((stream) => {
         this.webcam = document.getElementById('webcam');
         this.webcam.srcObject = stream;
+        //check when its loaded
+        this.webcam.onloadedmetadata = () => {
+          this.canvas = document.getElementById('canvas');
+          const ratio = this.webcam.videoWidth / this.webcam.videoHeight;
+          this.canvas.width = this.canvas.height * ratio;
+        };
+
         console.log('WEBCAM INITIALIZED')
       })
       .catch((err) => {
@@ -235,50 +251,116 @@ class BodyMovementsManager {
     return keypoints_names.every(name => poseKeypointNames.includes(name));
   }
 
-  getKeypoint(pose, keypointName) {
+  getKeypointFromPose(pose, keypointName) {
+    if(pose == undefined) return;
+    if(!pose.keypoints) return;
     if(pose && pose.keypoints){
       return pose.keypoints.find(keypoint => keypoint.name === keypointName);
     }
   }
 
+
+  getKeypoint(keypointName) {
+    if(!this.prevPose) return;
+    return this.getKeypointFromPose(this.prevPose, keypointName)
+  }
+
+  averageYpoints(pose) {
+
+    const keypoints = ["nose", "left_eye", "right_eye", "left_ear", "right_ear", "left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle"];
+    
+    const sum = keypoints.reduce((acc, keypointName) => {
+      const keypoint = this.getKeypointFromPose(pose, keypointName);
+      if(!keypoint) return acc;
+      return acc + keypoint.y;
+    }, 0);
+
+    return sum / pose.keypoints.length;
+  }
+
   isCrouching(pose){
-    // Extract relevant joint positions
-    const hipLeft = this.getKeypoint(pose, "left_hip");
-    const hipRight = this.getKeypoint(pose, "right_hip");
-    const kneeLeft = this.getKeypoint(pose, "left_knee");
-    const kneeRight = this.getKeypoint(pose, "right_knee");
-    const ankleLeft = this.getKeypoint(pose, "left_ankle");
-    const ankleRight = this.getKeypoint(pose, "right_ankle");
-
-    // Set thresholds
-    const variation = 80;  // Example threshold
-    const left = ((kneeLeft.y - hipLeft.y) < variation) || (kneeLeft.y <= hipLeft.y && hipLeft.y <= ankleLeft.y)
-    const right = ((kneeRight.y - hipRight.y) < variation) || (kneeRight.y <= hipRight.y && hipRight.y <= ankleRight.y)
-
-    // Check if angles indicate crouching
-    return left && right;
+    const middle = this.averageYpoints(pose);
+    return middle > this.crouchingThreshold;
   }
 
   isJumping(currentPose) {
-    console.log("CURRENT POSE", currentPose);
     if(!this.prevPose) return false;
-    console.log("PREV POSE", this.prevPose);
-    const prevAnkleLeft = this.getKeypoint(this.prevPose, "left_ankle");
-    const prevAnkleRight = this.getKeypoint(this.prevPose, "right_ankle");
-    const currentAnkleLeft = this.getKeypoint(currentPose, "left_ankle");
-    const currentAnkleRight = this.getKeypoint(currentPose, "right_ankle");
-    const variation = 5; 
-    console.log("LEFT ANKLE", prevAnkleLeft.y, currentAnkleLeft.y);
-    console.log("RIGHT ANKLE", prevAnkleRight.y, currentAnkleRight.y);
-    return (prevAnkleLeft.y - currentAnkleLeft.y) > variation && (prevAnkleRight.y - currentAnkleRight.y) > variation;
+    const prevAnkleLeft = this.getKeypointFromPose(this.prevPose, "left_ankle");
+    const prevAnkleRight = this.getKeypointFromPose(this.prevPose, "right_ankle");
+    const currentAnkleLeft = this.getKeypointFromPose(currentPose, "left_ankle");
+    const currentAnkleRight = this.getKeypointFromPose(currentPose, "right_ankle");
+    // const variation = 5; 
+    return (prevAnkleLeft.y - currentAnkleLeft.y) > this.jumpThreshold && (prevAnkleRight.y - currentAnkleRight.y) > this.jumpThreshold;
+  }
+
+  isCalibrated(keypointNames) {
+    const pose = this.prevPose;
+    if(!pose) return false;
+
+    const threshold = 0.3;
+    // Verify if all keypoints have better score than threshold
+    const scoreCondition = keypointNames.every(keypointName => {
+      const keypoint = this.getKeypointFromPose(pose, keypointName);
+      return keypoint.score > threshold;
+    });
+    if(!scoreCondition){
+      return false;
+    }
+
+    // Verifiy if arms are straight;
+    // get min and max y of all keypoints~
+    const armKeypoints = ["left_shoulder", "right_shoulder", "left_wrist", "right_wrist", "left_elbow", "right_elbow"];
+    const keypoints = armKeypoints.map(keypointName => this.getKeypointFromPose(pose, keypointName));
+    const minY = Math.min(...keypoints.map(keypoint => keypoint.y));
+    const maxY = Math.max(...keypoints.map(keypoint => keypoint.y));
+    const variation = 30;
+    
+    const armsCondition = (maxY - minY) < variation;
+    return scoreCondition && armsCondition;
+  }
+
+  clearCanvas() {
+    const ctx = this.canvas.getContext('2d');
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+  }
+
+  drawGraySides() {
+    const widthProportion = this.canvas.width / this.webcam.videoWidth;
+    const ctx = this.canvas.getContext('2d');
+
+    ctx.beginPath();
+    ctx.rect(0, 0, this.rightBoundary * widthProportion, this.canvas.height);
+    ctx.rect(this.leftBoundary * widthProportion, 0, this.canvas.width - this.leftBoundary * widthProportion, this.canvas.height);
+    ctx.fillStyle = 'rgba(128, 128, 128, 0.8)';
+    ctx.fill();
+  }
+
+  drawKeypoints(pose) {
+    this.clearCanvas();
+    
+    const heightProportion = this.canvas.height / this.webcam.videoHeight;
+    const widthProportion = this.canvas.width / this.webcam.videoWidth;
+    const ctx = this.canvas.getContext('2d');
+
+    this.keypointsToDraw.forEach(keypointName => {
+      const kp = this.getKeypointFromPose(pose, keypointName);
+      if(!kp) return;
+      ctx.beginPath();
+      ctx.arc(kp.x * widthProportion, kp.y * heightProportion, 5, 0, 2 * Math.PI);
+      ctx.fillStyle = 'green';
+      ctx.fill();
+    });
   }
 
   update() {
-    console.log("STATE:", this.state)
     if (this.detector) {
       this.detector.estimatePoses(this.webcam).then(poses => {
         const pose = poses[0];
-        if(!pose.keypoints) return;
+        if(!pose || !pose.keypoints) return;
+        this.drawKeypoints(pose);
+        this.drawGraySides();
+        
+        //this.drawKeypoints(pose)
         //pose.keypoints = pose.keypoints.filter(keypoint => keypoint.score >= 0.30);
 
         // Check if jumping
@@ -292,7 +374,7 @@ class BodyMovementsManager {
         }
 
         // Check if crouching
-        if (this.isCrouching(pose) && this.state == Pose.NORMAL) {
+        if (this.isCrouching(pose) && this.state == Pose.NORMAL && !this.isJumping(pose)) {
           this.state = Pose.CROUCHING;
           input.setKey('down', true);
         }
@@ -301,10 +383,75 @@ class BodyMovementsManager {
           input.setKey('down', false);
         }
 
+        this.strafe(pose);
+
 
         this.prevPose = pose;
       });
     }
+  }
+
+  calibrationUpdate() {
+    // print object istance id
+    if(this.detector){
+      this.detector.estimatePoses(this.webcam).then(poses => {
+        const pose = poses[0];
+        if(!pose || !pose.keypoints) return;
+        this.drawKeypoints(pose);
+        this.prevPose = pose;
+      });
+    }
+  }
+
+  setBounds(left, right){
+    console.log("Bounds set", left, right)
+    this.leftBoundary = left;
+    this.rightBoundary = right;
+  }
+
+  setJumpThreshold(threshold){
+    this.jumpThreshold = threshold;
+  }
+  setCrouchThreshold(threshold) {
+    this.crouchingThreshold = threshold;
+  }
+
+  strafe(pose) {
+    // get middle point between feet
+    const leftAnkle = this.getKeypointFromPose(pose, "left_ankle");
+    const rightAnkle = this.getKeypointFromPose(pose, "right_ankle");
+    
+
+    if(!leftAnkle || !rightAnkle) return;
+
+  
+    const leftBoundary = this.leftBoundary ? this.leftBoundary : this.webcam.videoWidth / 4;
+    const rightBoundary = this.rightBoundary ? this.rightBoundary : 3 * this.webcam.videoWidth / 4 ;
+
+    const playableWidth = leftBoundary - rightBoundary;
+
+    const middlePoint = (leftAnkle.x + rightAnkle.x) / 2;
+
+    let position =  (middlePoint - rightBoundary) / (playableWidth);
+
+
+    // left boundary = 250
+    // 500
+    // right boundary = 750
+    // maxwidth 1000
+    
+    // if is left moveToPosition = 0
+    // if middle  = 0.5
+    // if is right moveToPosition = 1
+
+    if(position < 0){
+      position = 0;
+    } else if (position > 1){
+      position = 1;
+    }
+
+    player.moveToPosition = position; // TODO:: improve
+    
   }
 }
 /**
@@ -383,13 +530,13 @@ class EnemyManager {
 				"cactus": [-60, 60]
 			},
 			"x_random_range": {
-				"cactus": [-.5, .5]
+				"cactus": [-2.5, 2.5]
 			},
 			"chance_to_spawn_tail": [100, 25], // tails spawn chances
 			"tail_rescale_rand": [[.6, .9], [.4, .7]], // tails rescale rand
 
 			"ptero_anim_speed": 0.10, // lower is faster
-			"ptero_y_rand": [0, 1.3, 3.5], // random ptero y positions
+			"ptero_y_rand": [1.3], // random ptero y positions
 
 			"ptero_z_speedup": -35
 		}
@@ -879,7 +1026,7 @@ class ScoreManager {
       audio.play('score');
       enemy.increase_velocity();
 
-      if(this.score >= 400 && this.lvl == 0) {
+      if(this.score >= 0 && this.lvl == 0) {
         // inc lvl
         this.lvl = 1;
         enemy.spawnPteros();
@@ -1164,6 +1311,7 @@ function nebulaCreateDynoDustEmitter(spd = 5) {
         ddZone.z = z;
     }
 
+    // x, y, z
     setP(0, -1.1, 15.5);
 
     dynoDustEmitter.emit();
@@ -1178,6 +1326,13 @@ let dynoDustEmitter = nebulaCreateDynoDustEmitter(4);
 
 nebulaSystem.addEmitter(dynoDustEmitter);
 nebulaSystem.addRenderer(new Nebula.MeshRenderer(scene, THREE));
+
+
+function updatePlayerDust(){
+    dynoDustEmitter.position.x = player.frame.position.x;
+    dynoDustEmitter.position.y = -1.1;
+    dynoDustEmitter.position.z = 15.5;
+}
 
 /**
  * Log class.
@@ -1455,6 +1610,20 @@ if(config.logs) {
         }
     }
 
+    doStrafe(timeDelta) {
+
+        // Check if A is pressed
+        const strafeVelocity = 20;
+        const minPosition = -2.5;
+        const maxPosition = 2.5;
+        //console.log(this.moveToPosition);
+        const positionToGo = maxPosition - this.moveToPosition * (maxPosition - minPosition - 0.5);
+        this.frame.position.x = positionToGo;
+        this.collisionBox.position.x = positionToGo;
+
+        
+    }
+
     reset() {
         this.currentFrame = 0;
         this.nextFrame();
@@ -1464,7 +1633,7 @@ if(config.logs) {
         if( this.frames ) {
             this.anim_speed = 0.18 / (enemy.config.vel / 2);
             this.doJump(timeDelta);
-
+            this.doStrafe(timeDelta);
             // draw frames
             if( this.clock.getElapsedTime() > this.anim_speed ) {
                 this.clock.elapsedTime = 0;
@@ -2111,6 +2280,7 @@ class NatureManager {
   }
 
   reset() {
+    console.log("Removing Nature")
     // remove misc
     for(let l in this.config.levels) {
       for(let i = 0; i < this.misc[l].length; i++) {
@@ -2687,6 +2857,78 @@ load_manager.set_loader('t_ground', [], function() {
 });
 
 /**
+ * Player class.
+ * @type {CalibrationManager}
+ */
+
+class CalibrationManager {
+    
+    constructor() {
+        this.isCalibrated = false;    
+        this.timeLeft = 0.5;
+    }
+
+    canPlay(){
+        return this.isCalibrated;
+    }
+    
+    update(timeDelta){
+        webcam_input.calibrationUpdate();
+        if (!this.isCalibrated){
+            // Check if required number of samples have been collected
+            const isInCorrectPosition = webcam_input.isCalibrated(['left_wrist', 'right_wrist', 'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow']);
+            if (isInCorrectPosition){
+                this.timeLeft -= timeDelta;
+                if (this.timeLeft <= 0){
+                    this.finishCalibration();
+                }
+            } else {
+                this.timeLeft = 0.5; // 2 seconds
+            }
+        }
+    }
+
+    finishCalibration(){
+        this.isCalibrated = true;
+        
+        // Get left and right arm x positions
+        const leftWrist = webcam_input.getKeypoint('left_wrist');
+        const rightWrist = webcam_input.getKeypoint('right_wrist');
+
+        const leftHip = webcam_input.getKeypoint('left_hip');
+        const rightHip = webcam_input.getKeypoint('right_hip');
+        const leftKnee = webcam_input.getKeypoint('left_knee');
+        const rightKnee = webcam_input.getKeypoint('right_knee');
+        const leftAnkle = webcam_input.getKeypoint('left_ankle');
+        const rightAnkle = webcam_input.getKeypoint('right_ankle');
+
+        const nose = webcam_input.getKeypoint('nose');
+        const middleAnkle = (leftAnkle.y + rightAnkle.y) / 2;
+        const personHeight = middleAnkle - nose.y;
+        
+
+        const avg = Math.abs((leftKnee.y - leftAnkle.y + rightKnee.y - rightAnkle.y) / 2)
+        const femurLength = Math.abs((leftHip.y - leftKnee.y) + (rightHip.y - rightKnee.y) / 2)
+        
+        console.log("Calibration finished", leftWrist, rightWrist);
+
+        if(leftWrist && rightWrist){
+            webcam_input.setBounds(leftWrist.x, rightWrist.x);
+            webcam_input.setJumpThreshold(avg / 15);
+            const middle = webcam_input.averageYpoints(webcam_input.prevPose)
+            webcam_input.setCrouchThreshold(middle * 1.15)
+        }
+
+    }
+
+    reset(){
+        this.isCalibrated = false;
+        this.timeLeft = 0.5;
+    }
+  }
+let calibration = new CalibrationManager();
+
+/**
  * Effects class.
  * Rain, day/night, etc.
  * @type {EffectsManager}
@@ -2699,7 +2941,7 @@ class EffectsManager {
       this.daytime = {
         "is_day": true,
         "duration": {
-          "day": 60, // sec
+          "day": 50, // sec
           "night": 20, // sec
         },
         "transition": {
@@ -2715,9 +2957,9 @@ class EffectsManager {
             "shadow_radius": 1
           },
           "night": {
-            "ambient": 0,
-            "direct": .1,
-            "shadow_radius": 10
+            "ambient": 0.1,
+            "direct": .4,
+            "shadow_radius": 2
           }
         },
         "fog": {
@@ -2919,12 +3161,19 @@ let effects = new EffectsManager();
  * @type {EnemyManager}
  */
 
+// States : BROWSER - CALIBRATION - PLAYING - PAUSED - GAMEOVER
+const State = {
+    BROWSER: 'BROWSER',
+    CALIBRATION: 'CALIBRATION',
+    PLAYING: 'PLAYING',
+    PAUSED: 'PAUSED',
+    GAMEOVER: 'GAMEOVER'
+}
+
 class GameManager {
 	constructor(interface_manager) {
-		this.isPlaying = false;
-        this.isPaused = false;
-        this.isFirstStart = true;
         this.lastTimeDelta = false;
+        this.state = State.BROWSER;
 
         this.interface = interface_manager;
         this.starter = null;
@@ -2994,24 +3243,24 @@ class GameManager {
         }
     }
 
+    async startCalibration(){
+        this.state = State.CALIBRATION;
+
+        this.loop();
+    }
+
 	async start() {
-        if(this.isPlaying) {
+        if(this.state == State.PLAYING) {
             return false;
         }
 
-		this.isPlaying = true;
+		this.state = State.PLAYING;
 
 		// set running speed (def 13)
 		enemy.increase_velocity(15, true);
 
         // init score
         score.set(0);
-
-        // init stuff
-        // if(this.isFirstStart) {
-        //     // one time inits
-        //     this.isFirstStart = false;
-        // }
 
         nature.initGround();
         nature.initEarth();
@@ -3096,10 +3345,8 @@ class GameManager {
 	}
 
     stop() {
-        if(!this.isPlaying) {return false;}
-
-        // stop the loop
-    	this.isPlaying = false;
+        if(this.state !== State.PLAYING) return false;
+        this.state = State.GAMEOVER;
 
 		// remove dust particles
 		dynoDustEmitter.removeAllParticles();
@@ -3118,21 +3365,21 @@ class GameManager {
 
         // set starters
         this.setStarter(0);
+        calibration.reset();
     }
 
     pause() {
-        if(!this.isPlaying) {return false;}
 
-        this.isPaused = true;
-        this.isPlaying = false;
+        if(this.state !== State.PLAYING) return false;
+        
+        this.state = State.PAUSED;
         audio.pause('bg');
     }
 
     resume() {
-        if(!this.isPaused) {return false;}
-
-        this.isPlaying = true;
-        this.isPaused = false;
+        if(this.state !== State.PAUSED) return false;
+        this.state = State.PLAYING;
+        
         audio.resume('bg');
 
         clock.getDelta(); // drop delta
@@ -3143,7 +3390,7 @@ class GameManager {
     reset() {
         // reset running speed (def 13)
         enemy.increase_velocity(13, true);
-
+        
         // reset stuff
         enemy.reset();
         nature.reset();
@@ -3152,25 +3399,65 @@ class GameManager {
         effects.reset();
 
         // redraw to remove objects from scene
-        this.render();
+        //this.render();
     }
 
     restart() {
-        if(this.isPlaying) {
+        console.log("Restart");
+        if(this.state === State.PLAYING) {
             this.stop();
         }
-
+        
         this.reset();
         this.start();
+        game.interface.buttons.restart.classList.add('hidden');
+        //this.state = State.PLAYING;
     }
 
     render() {
         let timeDelta = clock.getDelta();
-
         if(timeDelta > 0.15) {
             timeDelta = 0.15;
         }
+        
+        switch(this.state) {
+            case State.PLAYING:
+                this.playingUpdate(timeDelta);
+                break;
+            case State.GAMEOVER:
+            case State.CALIBRATION:
+                this.gameCalibrationUpdate(timeDelta);
+                break;
+            
+        }
+        
 
+        
+    }
+
+    gameCalibrationUpdate(timeDelta){
+        calibration.update(timeDelta);
+        if(calibration.isCalibrated){
+            calibration.isCalibrated = false;
+            console.log("Calibrated");
+            switch(this.state){
+                case State.CALIBRATION:
+                    this.start();
+                    break;
+                case State.GAMEOVER:
+                    this.restart();
+                    return;
+            }
+        }
+        if(config.renderer.postprocessing.enable) {
+            // postprocessing
+            composer.render(timeDelta);
+        } else {
+            // standart
+            renderer.render( scene, camera );
+        }
+    }
+    playingUpdate(timeDelta){
         if(config.camera.controls) {
             controls.update();}
 
@@ -3179,7 +3466,9 @@ class GameManager {
         nature.update(timeDelta);
         input.update();
         effects.update(timeDelta);
+        updatePlayerDust();
         nebulaSystem.update();
+        
 
         if(config.renderer.postprocessing.enable) {
             // postprocessing
@@ -3196,14 +3485,14 @@ class GameManager {
         if(state == 'visible') {
             // resume
             logs.log('GAME RESUME');
-            if(game.isPaused) {
+            if(this.state == State.PAUSED) {
                 game.resume();
                 effects.resume();
             }
         } else {
             // pause
             logs.log('GAME PAUSE');
-            if(game.isPlaying) {
+            if(this.state == State.PLAYING) {
                 game.pause();
                 effects.pause();
             }
@@ -3211,9 +3500,9 @@ class GameManager {
     }
 
     loop() {
-        if(!this.isPlaying) {
+        if(!this.state == State.PLAYING && !this.state == State.CALIBRATION) {
             // stop the loop if necessary
-            return false;
+            //return false;
         }
 
         requestAnimationFrame(function() {
@@ -3255,11 +3544,11 @@ class InterfaceManager {
     	game.interface.buttons.start.display = 'none'; //hide
    		document.body.classList.add('game-started');
 
-   		game.start();
+   		game.startCalibration();
     }
 
     btnRestartClick(e) {
-    	game.interface.buttons.restart.classList.add('hidden');
+		console.log("Button to restart was clicked");
 
    		game.restart();
     }

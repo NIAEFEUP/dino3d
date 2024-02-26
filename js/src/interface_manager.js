@@ -30,11 +30,11 @@ class InterfaceManager {
     	game.interface.buttons.start.display = 'none'; //hide
    		document.body.classList.add('game-started');
 
-   		game.start();
+   		game.startCalibration();
     }
 
     btnRestartClick(e) {
-    	game.interface.buttons.restart.classList.add('hidden');
+		console.log("Button to restart was clicked");
 
    		game.restart();
     }

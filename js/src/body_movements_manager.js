@@ -46,6 +46,23 @@ class BodyMovementsManager {
     });
   }
 
+  setFullScreen() {
+    this.webcam.classList.remove('minimize');
+    this.webcam.classList.add('fullscreen');
+
+    this.canvas.classList.remove('minimize');
+    this.canvas.classList.add('fullscreen');
+  }
+
+  resetFullScreen() {
+    this.webcam.classList.remove('fullscreen');
+    this.webcam.classList.add('minimize');
+
+    this.canvas.classList.remove('fullscreen');
+    this.canvas.classList.add('minimize');
+  }
+
+
   pointsExist(pose, keypoints_names) {
     const poseKeypointNames = pose.keypoints.map(keypoint => keypoint.name);
     return keypoints_names.every(name => poseKeypointNames.includes(name));

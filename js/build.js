@@ -138,7 +138,7 @@ class AudioManager {
           volume: .3
         }),
         "highest_score": new Howl({
-          src: [this.base_path + 'Powerup33.wav'],
+          src: [this.base_path + 'Randomize19.wav'],
           preload: true,
           autoplay: false,
           loop: false,
@@ -245,6 +245,23 @@ class BodyMovementsManager {
       console.log(err);
     });
   }
+
+  setFullScreen() {
+    this.webcam.classList.remove('minimize');
+    this.webcam.classList.add('fullscreen');
+
+    this.canvas.classList.remove('minimize');
+    this.canvas.classList.add('fullscreen');
+  }
+
+  resetFullScreen() {
+    this.webcam.classList.remove('fullscreen');
+    this.webcam.classList.add('minimize');
+
+    this.canvas.classList.remove('fullscreen');
+    this.canvas.classList.add('minimize');
+  }
+
 
   pointsExist(pose, keypoints_names) {
     const poseKeypointNames = pose.keypoints.map(keypoint => keypoint.name);
@@ -950,7 +967,7 @@ class ScoreManager {
     constructor() {
       this.score = 0;
       this.highest_score = 0;
-      this.highest_alert = false;
+      this.highest_alert = true;
       this.zero_padding = 5;
       this.config = {}
       this.timer = null;
@@ -1018,6 +1035,7 @@ class ScoreManager {
     }
 
     flash() {
+      console.log("flsah")
       this.clock.stop();
       this.clock.elapsedTime = 0;
       this.clock.start();
@@ -3245,7 +3263,7 @@ class GameManager {
 
     async startCalibration(){
         this.state = State.CALIBRATION;
-
+        webcam_input.setFullScreen();
         this.loop();
     }
 
@@ -3257,7 +3275,7 @@ class GameManager {
 		this.state = State.PLAYING;
 
 		// set running speed (def 13)
-		enemy.increase_velocity(15, true);
+		enemy.increase_velocity(13, true);
 
         // init score
         score.set(0);
@@ -3365,6 +3383,7 @@ class GameManager {
 
         // set starters
         this.setStarter(0);
+        webcam_input.setFullScreen();
         calibration.reset();
     }
 
@@ -3403,7 +3422,7 @@ class GameManager {
     }
 
     restart() {
-        console.log("Restart");
+        console.log("Restart game");
         if(this.state === State.PLAYING) {
             this.stop();
         }
@@ -3430,14 +3449,12 @@ class GameManager {
                 break;
             
         }
-        
-
-        
     }
 
     gameCalibrationUpdate(timeDelta){
         calibration.update(timeDelta);
         if(calibration.isCalibrated){
+            webcam_input.resetFullScreen();
             calibration.isCalibrated = false;
             console.log("Calibrated");
             switch(this.state){
@@ -3537,7 +3554,6 @@ class InterfaceManager {
     init() {
     	// hook buttons
     	this.buttons.start.addEventListener('click', this.btnStartClick);
-    	this.buttons.restart.addEventListener('click', this.btnRestartClick);
     }
 
     btnStartClick(e) {
@@ -3545,12 +3561,6 @@ class InterfaceManager {
    		document.body.classList.add('game-started');
 
    		game.startCalibration();
-    }
-
-    btnRestartClick(e) {
-		console.log("Button to restart was clicked");
-
-   		game.restart();
     }
 }
 let game = new GameManager(new InterfaceManager());

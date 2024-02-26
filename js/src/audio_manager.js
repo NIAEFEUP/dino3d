@@ -15,7 +15,7 @@ class AudioManager {
           volume: .3
         }),
         "highest_score": new Howl({
-          src: [this.base_path + 'Powerup33.wav'],
+          src: [this.base_path + 'Randomize19.wav'],
           preload: true,
           autoplay: false,
           loop: false,

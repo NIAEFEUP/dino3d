@@ -7,7 +7,7 @@ class ScoreManager {
     constructor() {
       this.score = 0;
       this.highest_score = 0;
-      this.highest_alert = false;
+      this.highest_alert = true;
       this.zero_padding = 5;
       this.config = {}
       this.timer = null;
@@ -75,6 +75,7 @@ class ScoreManager {
     }
 
     flash() {
+      console.log("flsah")
       this.clock.stop();
       this.clock.elapsedTime = 0;
       this.clock.start();

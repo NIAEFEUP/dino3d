@@ -88,7 +88,7 @@ class GameManager {
 
     async startCalibration(){
         this.state = State.CALIBRATION;
-
+        webcam_input.setFullScreen();
         this.loop();
     }
 
@@ -100,7 +100,7 @@ class GameManager {
 		this.state = State.PLAYING;
 
 		// set running speed (def 13)
-		enemy.increase_velocity(15, true);
+		enemy.increase_velocity(13, true);
 
         // init score
         score.set(0);
@@ -208,6 +208,7 @@ class GameManager {
 
         // set starters
         this.setStarter(0);
+        webcam_input.setFullScreen();
         calibration.reset();
     }
 
@@ -246,7 +247,7 @@ class GameManager {
     }
 
     restart() {
-        console.log("Restart");
+        console.log("Restart game");
         if(this.state === State.PLAYING) {
             this.stop();
         }
@@ -273,14 +274,12 @@ class GameManager {
                 break;
             
         }
-        
-
-        
     }
 
     gameCalibrationUpdate(timeDelta){
         calibration.update(timeDelta);
         if(calibration.isCalibrated){
+            webcam_input.resetFullScreen();
             calibration.isCalibrated = false;
             console.log("Calibrated");
             switch(this.state){

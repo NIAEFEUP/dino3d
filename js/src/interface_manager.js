@@ -23,7 +23,6 @@ class InterfaceManager {
     init() {
     	// hook buttons
     	this.buttons.start.addEventListener('click', this.btnStartClick);
-    	this.buttons.restart.addEventListener('click', this.btnRestartClick);
     }
 
     btnStartClick(e) {
@@ -31,11 +30,5 @@ class InterfaceManager {
    		document.body.classList.add('game-started');
 
    		game.startCalibration();
-    }
-
-    btnRestartClick(e) {
-		console.log("Button to restart was clicked");
-
-   		game.restart();
     }
 }

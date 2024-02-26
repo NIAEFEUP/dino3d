@@ -806,6 +806,9 @@ END // CHART'S RULES
   right: 0;
   bottom: 0;
   margin: auto;
+  -webkit-transform: translateY(-140px);
+  -ms-transform: translateY(-140px);
+  transform: translateY(-140px);
   font-family: "Press Start 2P", cursive;
   text-align: center;
   cursor: pointer;
@@ -850,16 +853,32 @@ END // CHART'S RULES
 
 #webcam {
   position: absolute;
-  top: 0;
-  left: 0;
   z-index: 100;
-  background: blue;
-  height: 150px;
+  box-shadow: 0px 0px 33px -15px rgba(0, 0, 0, 0.67);
+  -webkit-box-shadow: 0px 0px 33px -15px rgba(0, 0, 0, 0.67);
+  -moz-box-shadow: 0px 0px 33px -15px rgba(0, 0, 0, 0.67);
 }
 
 #canvas {
   position: absolute;
+  z-index: 101;
+}
+
+.minimize {
+  position: absolute;
   top: 0;
   left: 0;
-  z-index: 101;
+  height: 150px;
+  border-bottom-right-radius: 8px;
+}
+
+.fullscreen {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  -webkit-transform: translate(-50%, -50%);
+  -ms-transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%);
+  height: 400px;
+  border-radius: 8px;
 }

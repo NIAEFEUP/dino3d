@@ -238,7 +238,12 @@ class BodyMovementsManager {
         console.log(err);
       });
 
-    poseDetection.createDetector(this.model).then(detector => {
+    const detectorConfig = {
+      modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
+      minPoseScore: 0.3
+    };
+
+    poseDetection.createDetector(this.model, detectorConfig).then(detector => {
       this.detector = detector;
       console.log('DETECTOR INITIALIZED')
     }).catch(err => {
@@ -310,7 +315,7 @@ class BodyMovementsManager {
     return (prevAnkleLeft.y - currentAnkleLeft.y) > this.jumpThreshold && (prevAnkleRight.y - currentAnkleRight.y) > this.jumpThreshold;
   }
 
-  isCalibrated(keypointNames) {
+  isPoseT(keypointNames) {
     const pose = this.prevPose;
     if(!pose) return false;
 
@@ -1047,13 +1052,14 @@ class ScoreManager {
       if(this.score >= 0 && this.lvl == 0) {
         // inc lvl
         this.lvl = 1;
-        enemy.spawnPteros();
-        logs.log('Pterodactyls started to spawn');
       } else if(this.score >= 1000 && this.lvl == 1) {
         // inc lvl
         this.lvl = 2;
         this.add_vel = 20; //twice the score gain speed
         logs.log('Score level 2');
+        
+        enemy.spawnPteros();
+        logs.log('Pterodactyls started to spawn');
       } else if(this.score >= 3000 && this.lvl == 2) {
         // inc lvl
         this.lvl = 3;
@@ -2891,10 +2897,10 @@ class CalibrationManager {
     }
     
     update(timeDelta){
-        webcam_input.calibrationUpdate();
         if (!this.isCalibrated){
+            webcam_input.calibrationUpdate();
             // Check if required number of samples have been collected
-            const isInCorrectPosition = webcam_input.isCalibrated(['left_wrist', 'right_wrist', 'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow']);
+            const isInCorrectPosition = webcam_input.isPoseT(['left_wrist', 'right_wrist', 'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow']);
             if (isInCorrectPosition){
                 this.timeLeft -= timeDelta;
                 if (this.timeLeft <= 0){
@@ -2936,7 +2942,6 @@ class CalibrationManager {
             const middle = webcam_input.averageYpoints(webcam_input.prevPose)
             webcam_input.setCrouchThreshold(middle * 1.15)
         }
-
     }
 
     reset(){
@@ -3247,8 +3252,6 @@ class GameManager {
                     setTimeout(function() {
                         game.interface.btnStartClick();
                     }, timeout);
-                } else {
-                    game.interface.btnRestartClick();
                 }
             }, 1);
         }
@@ -3423,14 +3426,10 @@ class GameManager {
 
     restart() {
         console.log("Restart game");
-        if(this.state === State.PLAYING) {
-            this.stop();
-        }
-        
+        this.stop();
         this.reset();
         this.start();
         game.interface.buttons.restart.classList.add('hidden');
-        //this.state = State.PLAYING;
     }
 
     render() {
@@ -3441,10 +3440,12 @@ class GameManager {
         
         switch(this.state) {
             case State.PLAYING:
+                console.log("In playing state")
                 this.playingUpdate(timeDelta);
                 break;
             case State.GAMEOVER:
             case State.CALIBRATION:
+                console.log("In gameover/calibration state")
                 this.gameCalibrationUpdate(timeDelta);
                 break;
             
@@ -3464,6 +3465,9 @@ class GameManager {
                 case State.GAMEOVER:
                     this.restart();
                     return;
+                default:
+                    console.log("Unknown state, BAD things happening")
+                    break;
             }
         }
         if(config.renderer.postprocessing.enable) {

@@ -72,8 +72,6 @@ class GameManager {
                     setTimeout(function() {
                         game.interface.btnStartClick();
                     }, timeout);
-                } else {
-                    game.interface.btnRestartClick();
                 }
             }, 1);
         }
@@ -248,14 +246,10 @@ class GameManager {
 
     restart() {
         console.log("Restart game");
-        if(this.state === State.PLAYING) {
-            this.stop();
-        }
-        
+        this.stop();
         this.reset();
         this.start();
         game.interface.buttons.restart.classList.add('hidden');
-        //this.state = State.PLAYING;
     }
 
     render() {
@@ -266,10 +260,12 @@ class GameManager {
         
         switch(this.state) {
             case State.PLAYING:
+                console.log("In playing state")
                 this.playingUpdate(timeDelta);
                 break;
             case State.GAMEOVER:
             case State.CALIBRATION:
+                console.log("In gameover/calibration state")
                 this.gameCalibrationUpdate(timeDelta);
                 break;
             
@@ -289,6 +285,9 @@ class GameManager {
                 case State.GAMEOVER:
                     this.restart();
                     return;
+                default:
+                    console.log("Unknown state, BAD things happening")
+                    break;
             }
         }
         if(config.renderer.postprocessing.enable) {

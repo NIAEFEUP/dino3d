@@ -87,13 +87,14 @@ class ScoreManager {
       if(this.score >= 0 && this.lvl == 0) {
         // inc lvl
         this.lvl = 1;
-        enemy.spawnPteros();
-        logs.log('Pterodactyls started to spawn');
       } else if(this.score >= 1000 && this.lvl == 1) {
         // inc lvl
         this.lvl = 2;
         this.add_vel = 20; //twice the score gain speed
         logs.log('Score level 2');
+        
+        enemy.spawnPteros();
+        logs.log('Pterodactyls started to spawn');
       } else if(this.score >= 3000 && this.lvl == 2) {
         // inc lvl
         this.lvl = 3;

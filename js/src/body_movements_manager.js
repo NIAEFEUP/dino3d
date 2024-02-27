@@ -38,7 +38,12 @@ class BodyMovementsManager {
         console.log(err);
       });
 
-    poseDetection.createDetector(this.model).then(detector => {
+    const detectorConfig = {
+      modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
+      minPoseScore: 0.3
+    };
+
+    poseDetection.createDetector(this.model, detectorConfig).then(detector => {
       this.detector = detector;
       console.log('DETECTOR INITIALIZED')
     }).catch(err => {
@@ -110,7 +115,7 @@ class BodyMovementsManager {
     return (prevAnkleLeft.y - currentAnkleLeft.y) > this.jumpThreshold && (prevAnkleRight.y - currentAnkleRight.y) > this.jumpThreshold;
   }
 
-  isCalibrated(keypointNames) {
+  isPoseT(keypointNames) {
     const pose = this.prevPose;
     if(!pose) return false;
 

@@ -15,10 +15,10 @@ class CalibrationManager {
     }
     
     update(timeDelta){
-        webcam_input.calibrationUpdate();
         if (!this.isCalibrated){
+            webcam_input.calibrationUpdate();
             // Check if required number of samples have been collected
-            const isInCorrectPosition = webcam_input.isCalibrated(['left_wrist', 'right_wrist', 'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow']);
+            const isInCorrectPosition = webcam_input.isPoseT(['left_wrist', 'right_wrist', 'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow']);
             if (isInCorrectPosition){
                 this.timeLeft -= timeDelta;
                 if (this.timeLeft <= 0){
@@ -60,7 +60,6 @@ class CalibrationManager {
             const middle = webcam_input.averageYpoints(webcam_input.prevPose)
             webcam_input.setCrouchThreshold(middle * 1.15)
         }
-
     }
 
     reset(){

@@ -3,7 +3,7 @@
  * @type {Object}
  */
 const config = {
-	"base_path": "/",
+	"base_path": window.location.pathname, // To work on GitHub Pages
 	"logs": true,
 	"debug": false,
 	"camera": {

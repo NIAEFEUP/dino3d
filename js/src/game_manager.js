@@ -11,7 +11,7 @@ const State = {
     PLAYING: 'PLAYING',
     PAUSED: 'PAUSED',
     GAMEOVER: 'GAMEOVER'
-}
+};
 
 class GameManager {
 	constructor(interface_manager) {
@@ -40,6 +40,7 @@ class GameManager {
                     game.interface.btnStartClick();
                 } else {
                     game.interface.buttons.start.classList.remove('hidden');
+                    game.interface.buttons.startLower.classList.remove('hidden');
                     game.setStarter();
                 }
             }, function() {
@@ -59,6 +60,8 @@ class GameManager {
 
             enemy.increase_velocity(10);
         }
+
+        calibration.listenToKeyPress();
     }
 
     setStarter(timeout = 600) {
@@ -84,8 +87,16 @@ class GameManager {
         }
     }
 
-    async startCalibration(){
+    async startCalibration(cameraSection=null) {
         this.state = State.CALIBRATION;
+
+        if (webcam_input.getCameraSection() === null) {
+            if (cameraSection === null) {
+                webcam_input.setCameraSection(CameraSection.COMPLETE);
+            }
+            else webcam_input.setCameraSection(cameraSection);
+        }
+
         webcam_input.setFullScreen();
         this.loop();
     }
@@ -265,7 +276,12 @@ class GameManager {
                 break;
             case State.GAMEOVER:
             case State.CALIBRATION:
-                console.log("In gameover/calibration state")
+                if (this.state == State.GAMEOVER) {
+                    console.log("In gameover state");
+                }
+                else {
+                    console.log("In calibration state");
+                }
                 this.gameCalibrationUpdate(timeDelta);
                 break;
             

@@ -4,6 +4,11 @@ const Pose = {
   CROUCHING: 'CROUCHING'
 };
 
+const CameraSection = {
+  COMPLETE: 'COMPLETE',
+  BOTTOM: 'BOTTOM',
+};
+
 class BodyMovementsManager {
   constructor() {
     this.model = poseDetection.SupportedModels.MoveNet;
@@ -15,11 +20,32 @@ class BodyMovementsManager {
     this.leftBoundary = null;
     this.rightBoundary = null;
     this.jumpThreshold = null;
-    this.requiredKeypoints = ["left_ankle", "right_ankle", "left_hip", "right_hip", "left_knee", "right_knee", "left_shoulder", "right_shoulder"];
-    this.keypointsToDraw = ['left_wrist', 'right_wrist', 'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow', 'left_ankle', 'right_ankle'];
+
+    this.cameraSection = null;
+    
+    this.requiredKeypoints = {
+      [CameraSection.COMPLETE]: ["left_ankle", "right_ankle", "left_hip", "right_hip", "left_knee", "right_knee", "left_shoulder", "right_shoulder"],
+      [CameraSection.BOTTOM]: ["left_ankle", "right_ankle", "left_hip", "right_hip", "left_knee", "right_knee"]
+    };
+    this.keypointsToDraw = {
+      [CameraSection.COMPLETE]: ['left_wrist', 'right_wrist', 'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow', 'left_ankle', 'right_ankle'],
+      [CameraSection.BOTTOM]: ["left_ankle", "right_ankle", "left_hip", "right_hip", "left_knee", "right_knee"]
+    }
     this.init();
   }
-
+  setCameraSection(cameraSection) {
+    console.log("Set camera section to " + cameraSection);
+    this.cameraSection = cameraSection;
+  }
+  getCameraSection() {
+    return this.cameraSection;
+  }
+  getKeypointsToDraw() {
+    return this.keypointsToDraw[this.cameraSection];
+  }
+  getRequiredKeypoints() {
+    return this.requiredKeypoints[this.cameraSection];
+  }
   init() {
     navigator.mediaDevices.getUserMedia({ video: true, audio: false })
       .then((stream) => {
@@ -48,6 +74,7 @@ class BodyMovementsManager {
       console.log('DETECTOR INITIALIZED')
     }).catch(err => {
       console.log(err);
+      console.log("DETECTOR NOT INITIALIZED (ERROR)");
     });
   }
 
@@ -87,10 +114,7 @@ class BodyMovementsManager {
     return this.getKeypointFromPose(this.prevPose, keypointName)
   }
 
-  averageYpoints(pose) {
-
-    const keypoints = ["nose", "left_eye", "right_eye", "left_ear", "right_ear", "left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle"];
-    
+  averageYPointsKeypoints(pose, keypoints) {
     const sum = keypoints.reduce((acc, keypointName) => {
       const keypoint = this.getKeypointFromPose(pose, keypointName);
       if(!keypoint) return acc;
@@ -98,6 +122,17 @@ class BodyMovementsManager {
     }, 0);
 
     return sum / pose.keypoints.length;
+  }
+  averageYpoints(pose) {
+    switch (this.cameraSection) {
+      case CameraSection.BOTTOM:
+        return this.averageYPointsKeypoints(pose, ["left_hip", "right_hip", "left_knee", "right_knee"]);
+      case CameraSection.COMPLETE:
+        return this.averageYPointsKeypoints(pose, ["nose", "left_eye", "right_eye", "left_ear", "right_ear", "left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle"]);
+      default:
+        console.error("Unknown camera section " + this.cameraSection);
+        break;
+    }
   }
 
   isCrouching(pose){
@@ -111,26 +146,30 @@ class BodyMovementsManager {
     const prevAnkleRight = this.getKeypointFromPose(this.prevPose, "right_ankle");
     const currentAnkleLeft = this.getKeypointFromPose(currentPose, "left_ankle");
     const currentAnkleRight = this.getKeypointFromPose(currentPose, "right_ankle");
-    // const variation = 5; 
+
     return (prevAnkleLeft.y - currentAnkleLeft.y) > this.jumpThreshold && (prevAnkleRight.y - currentAnkleRight.y) > this.jumpThreshold;
   }
 
-  isPoseT(keypointNames) {
+  enoughConfidence(keypointNames, threshold) {
     const pose = this.prevPose;
     if(!pose) return false;
 
-    const threshold = 0.3;
     // Verify if all keypoints have better score than threshold
-    const scoreCondition = keypointNames.every(keypointName => {
+    return keypointNames.every(keypointName => {
       const keypoint = this.getKeypointFromPose(pose, keypointName);
       return keypoint.score > threshold;
     });
-    if(!scoreCondition){
+  }
+
+  isPoseT(keypointNames) {
+    const threshold = 0.3;
+    if (!this.enoughConfidence(keypointNames, threshold)) {
       return false;
     }
+    const pose = this.prevPose;
 
     // Verifiy if arms are straight;
-    // get min and max y of all keypoints~
+    // get min and max y of all keypoints
     const armKeypoints = ["left_shoulder", "right_shoulder", "left_wrist", "right_wrist", "left_elbow", "right_elbow"];
     const keypoints = armKeypoints.map(keypointName => this.getKeypointFromPose(pose, keypointName));
     const minY = Math.min(...keypoints.map(keypoint => keypoint.y));
@@ -138,7 +177,7 @@ class BodyMovementsManager {
     const variation = 30;
     
     const armsCondition = (maxY - minY) < variation;
-    return scoreCondition && armsCondition;
+    return armsCondition;
   }
 
   clearCanvas() {
@@ -164,7 +203,8 @@ class BodyMovementsManager {
     const widthProportion = this.canvas.width / this.webcam.videoWidth;
     const ctx = this.canvas.getContext('2d');
 
-    this.keypointsToDraw.forEach(keypointName => {
+    const keypointsToDraw = this.getKeypointsToDraw();
+    keypointsToDraw.forEach(keypointName => {
       const kp = this.getKeypointFromPose(pose, keypointName);
       if(!kp) return;
       ctx.beginPath();
@@ -181,8 +221,7 @@ class BodyMovementsManager {
         if(!pose || !pose.keypoints) return;
         this.drawKeypoints(pose);
         this.drawGraySides();
-        
-        //this.drawKeypoints(pose)
+
         //pose.keypoints = pose.keypoints.filter(keypoint => keypoint.score >= 0.30);
 
         // Check if jumping
@@ -225,10 +264,16 @@ class BodyMovementsManager {
     }
   }
 
-  setBounds(left, right){
-    console.log("Bounds set", left, right)
-    this.leftBoundary = left;
-    this.rightBoundary = right;
+  setBounds(left=null, right=null){
+    if (left == null || right == null) {
+      this.leftBoundary = this.webcam.videoWidth * 3 / 4;
+      this.rightBoundary = this.webcam.videoWidth / 4;
+    }
+    else {
+      this.leftBoundary = left;
+      this.rightBoundary = right;
+    }
+    console.log("Bounds set", this.leftBoundary, this.rightBoundary);
   }
 
   setJumpThreshold(threshold){

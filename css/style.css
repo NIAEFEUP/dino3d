@@ -780,12 +780,12 @@ END // CHART'S RULES
   margin-top: 0;
   line-height: 23.25px;
 }
-#chrome-no-internet > .info > ul #game-start {
+#chrome-no-internet > .info > ul .game-start {
   color: #7FD133;
   font-weight: 500;
   cursor: pointer;
 }
-#chrome-no-internet > .info > ul #game-start.hidden {
+#chrome-no-internet > .info > ul .game-start.hidden {
   display: none;
 }
 #chrome-no-internet > .info > small {

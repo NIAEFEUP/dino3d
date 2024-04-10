@@ -90,6 +90,9 @@
       addKey(65, 'left');
       addKey(68, 'right');
 
+      addKey(9, 'tab');
+      addKey(13, 'enter');
+
       // Keyboard events
       window.addEventListener('keydown', (e) => {
         // console.log(e.keyCode);

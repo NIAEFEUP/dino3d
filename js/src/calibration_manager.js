@@ -14,8 +14,15 @@ class CalibrationManager {
         return this.isCalibrated;
     }
     listenToKeyPress() {
+        // keys on the left and right sides of the keyboard to allow easily pressing on both sides of the computer
         input.addKeyCallback('enter', 'justPressed', () => {
             console.log("Pressed enter");
+            if (!this.isCalibrated) {
+                this.finishCalibration();
+            }
+        });
+        input.addKeyCallback('tab', 'justPressed', () => {
+            console.log("Pressed Tab");
             if (!this.isCalibrated) {
                 this.finishCalibration();
             }
